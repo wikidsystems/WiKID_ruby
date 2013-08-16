@@ -1,0 +1,40 @@
+*** custom_require.rb	2005-07-06 10:14:03.000000000 -0400
+--- /usr/lib/ruby/site_ruby/1.8/rubygems/custom_require.rb	2005-11-13 09:23:14.000000000 -0500
+***************
+*** 96,102 ****
+      #
+      def matching_file(spec, path)  # :doc:
+        glob = "#{@lib_dirs[spec.object_id]}/#{path}#{SUFFIX_PATTERN}"
+!       return true unless Dir[glob].select { |f| File.file?(f) }.empty?
+      end
+  
+      # Return a list of all installed gemspecs, sorted by alphabetical
+--- 96,102 ----
+      #
+      def matching_file(spec, path)  # :doc:
+        glob = "#{@lib_dirs[spec.object_id]}/#{path}#{SUFFIX_PATTERN}"
+!       return true unless Dir[glob].select { |f| File.file?(f.untaint) }.empty?
+      end
+  
+      # Return a list of all installed gemspecs, sorted by alphabetical
+*** source_index.rb	2005-03-16 21:01:37.000000000 -0500
+--- /usr/lib/ruby/site_ruby/1.8/rubygems/source_index.rb	2005-11-13 09:22:22.000000000 -0500
+***************
+*** 70,77 ****
+      #
+      def self.load_specification(file_name)
+        begin
+!         spec_code = File.read(file_name)
+!         gemspec = eval(spec_code)
+          if gemspec.is_a?(Gem::Specification)
+            gemspec.loaded_from = file_name
+            return gemspec
+--- 70,77 ----
+      #
+      def self.load_specification(file_name)
+        begin
+!         spec_code = File.read(file_name.untaint)
+!         gemspec = eval(spec_code.untaint)
+          if gemspec.is_a?(Gem::Specification)
+            gemspec.loaded_from = file_name
+            return gemspec

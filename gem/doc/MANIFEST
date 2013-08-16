@@ -1,0 +1,15 @@
+/lib
+/lib/WiKID.rb
+/docs
+/docs/example
+/docs/example/example.rhtml
+/docs/example/example.rb
+/docs/rubygems-0.8.11.security-patch.diff
+/docs/LICENSE.txt
+/share
+/share/data
+/share/data/WiKID-ca.pem
+/tests
+/tests/ts_wikid.rb
+/README
+/MANIFEST

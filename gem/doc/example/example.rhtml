@@ -1,0 +1,280 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" 
+  "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<title>
+Example WiKID Network Client using Ruby
+</title>
+</head>
+<body bgcolor="#ffffff">
+<%
+require 'cgi'
+begin
+  require 'rubygems'
+  require_gem 'WiKID'
+rescue LoadError
+  require 'WiKID'
+end
+
+=begin rdoc
+ * Instantiation
+ * 
+ * This section instantiates the connection between the network client 
+ * application and the WiKID server.  For this to succeed, the network client 
+ * must have been issued a certificate from the WiKID server.  The certificate 
+ * is contained withing a PKCS12 certificate store and requires a passphrase to 
+ * access.
+ * 
+ * When the Auth_WiKID object is instantiated it will load the cert and establish 
+ * a persistent authenticated SSL connection.  This is normally done once per 
+ * server or application and shared by multiple threads.  In this example the 
+ * object is created and destroyed each page request.  This greatly (1000 times) 
+ * increases overhead of the process but allows all the functions to be shown 
+ * in this single example page.
+ * 
+ * Parameters are:
+ * 
+ * WiKID.new(String host, int port, String keyfile, String pass)
+ * 
+ * host = IP address of WIKID server
+ * port = TCP port number to connect to (default 8388)
+ * keyfile = Path to the PKCS12 certificate file
+ * pass = Passphrase to open the PKCS12 file
+=end
+
+servercode_default  = "127000000001"
+server_host         = "wikid-server.example.com"
+server_port         = 8388
+ca_cert_file        = "/srv/www/htdocs/wikid/ruby/gem/share/data/WiKID-ca.pem"
+client_key_file     = "issued-client-cert-and-key.pem"
+client_key_pass     = "changeme"
+
+form_action = "sample.rhtml"
+
+# puts "ENV: " + ENV.to_s
+
+cgi = CGI.new
+
+status = ''
+
+r = Hash.new
+valid_params = ['action','username','regcode','passcode','servercode']
+valid_params.each { |k| 
+    v = cgi[k].untaint.to_s
+    # pull out the first word-chunk, and drop the rest
+    # v = /^\W*(\w+).*/.match(v)[1]
+    r[k] = v
+}
+if (!r['action'].empty?)
+    r['action'] = r['action'].downcase
+end
+
+require 'pp'
+STDERR.puts r.to_s
+
+wc = WiKID::Auth.new(server_host, server_port, client_key_file, client_key_pass, ca_cert_file)
+if (wc.nil?)
+	puts "Unable to load ruby WiKID module!!"
+else
+	puts "WiKID module loaded!"
+end
+
+=begin rdoc
+ * Registration
+ *
+ * The registration process associates a device that has regitered its key with 
+ * the WiKID server to a userid that represents a individual with rights in the 
+ * network. * Devices can register with the server at will but have no access 
+ * rights until registered to a userid. * Inactive registrations are purged from 
+ * the system automatically.
+ *
+ * The registration process should be completed *only* after validating that the 
+ * user is not an imposter. * This may be done in various ways according to local 
+ * security policy. * It is assumed that whatever validation is required has been 
+ * completed successfully before callint the registerUsername function.
+ *
+ * Parameters are:
+ *
+ * registerUsername(String user, String regcode, String servercode)
+ *
+ * user = userid with which to associate device
+ * regcode = the registration code provided to the device
+ * servercode = the 12-digit code that represents the server/domain
+ *
+ * This method returns an integer representing the result of the registration.
+=end
+
+res = -1
+if (r['action'] == "register")
+    res = wc.registerUsername(r['username'], r['regcode'], r['servercode'])
+    if (res == 0)
+			status = "Success"
+    else 
+			status = "Failed ("+res+")"
+    end
+end
+
+=begin rdoc
+ * Login Online
+ *
+ * This function is the normal-state login for users. * This is called when the 
+ * users device is connected to the network and able to directly request a 
+ * passcode for access.
+ *
+ * Parameters are:
+ *
+ * user = userid to validate credentials for
+ * passcode = time-bounded, 1 use passcode
+ * servercode = 12-digit code that represents the server/domain
+ *
+ * This method returns a boolean representing sucessful or unsuccessful authentication
+ *
+=end
+
+isValid = false
+if (r['action'] == "check online")
+    isValid = wc.checkCredentials(r['username'], r['passcode'], r['servercode'])
+    if (isValid)
+			status = "Success"
+    else 
+			status = "Authentication Failed"
+		end
+end
+
+=begin rdoc
+ * Login Offline
+ *
+ * This function implements the challenge-reponse authentication for offline 
+ * devices. * Users are given a random challenge and the signed response is 
+ * returned and validated.
+ *
+ * Parameters are:
+ *
+ * checkCredentials(String user, String challenge, String response, String servercode)
+ *
+ * user = userid to validate credentials for
+ * challenge = the challeng value provided to the user
+ * response = the hashed/signed responss from the device
+ * servercode = 12-digit code that represents the server/domain
+=end
+
+# Not currently supported by the Open Source release 
+
+r_challenge = cgi["challenge"]
+r_response = cgi["response"]
+
+if (r['action'] == "check offline")
+    isValid = false
+    isValid = wc.checkCredentials(r['username'], r_challenge, r_response, r['servercode'])
+    if (isValid)
+        status = "Success"
+		else
+        status = "Authentication Failed"
+		end
+end
+
+=begin rdoc
+ * Add additional device to existing userid
+ *
+ * This method is used to add an additional device to the users account. * It 
+ * follows the same process as a *  normal registration but requires a passcode 
+ * from a device already registered to the userid. * This method * will 
+ * authenticate the user with the passcode provided prior to registering the 
+ * new device.
+ *
+ * Parameters are:
+ *
+ * registerUsername(String user, String regcode, String servercode, String passcode)
+ *
+ * user = userid with which to associate device
+ * regcode = the registration code provided to the device
+ * servercode = the 12-digit code that represents the server/domain
+ * passcode = time-bounded, 1 use passcode from a device already registered to this user
+ *
+ * This method returns an integer representing the result of the registration.
+=end
+
+if (r['action'] == "add device")
+    res = wc.registerUsername(r['username'], r['regcode'], r['servercode'], r['passcode'])
+    if (res == 0)
+			status = "Success"
+    else 
+			status = "Failed (" + res + ")"
+    end
+end
+
+if (!r['action'].nil? && !r['action'].empty?)
+    puts "<h1>Result: #{status}</h1>"
+else
+
+=begin
+			# generate a random number for the offline challenge
+			chall = ''
+			min = 1000000000
+			max = mt_getrandmax()
+			num = min + ((max-min) * mt_rand(0, 32767)/32767)
+			chall = num+""
+			chall = substr(chall, 0, 8)
+=end
+    %>
+     <h1> This page demonstrates the general usage of the WiKID network client.  </h1>
+
+     <!-- Registration -->
+     <hr />
+     <h2>Registration</h2>
+     <form action="<%= form_action %>" method="POST" >
+             UserID: <input type="text" size="25" name="username" value=""/><br />
+             Registration code: <input type="text" size="12" name="regcode" value=""/><br />
+             Domain code: <input type="text" size="16" name="servercode" value="<%= servercode_default %>"/><br />
+             <input type="submit" name="action" value="Register"><br />
+     </form>
+
+     <!-- Online Login -->
+     <hr />
+     <h2>Online Login:
+     </h2>
+     <form action="<%= form_action %>" method="POST" >
+             UserID: <input type="text" size="25" name="username" value=""/><br />
+             Passcode: <input type="text" size="12" name="passcode" value=""/><br />
+             Domain code: <input type="text" size="16" name="servercode" value="<%= servercode_default %>"/><br />
+             <input type="submit" name="action" value="Check Online"><br />
+     </form>
+
+	<%
+=begin
+		if (0)
+		%>
+		 # Not currently supported by the Open Source release
+     <!-- Offline Login -->
+     <hr />
+     <h2>Offline Login:
+     </h2>
+     <form action="<%= form_action %>" method="POST" >
+             UserID: <input type="text" size="25" name="username" value=""/><br />
+             Challenge: <%= chall %> <input type="hidden" name="challenge" value="<%= chall %>"/><br />
+             Response: <input type="text" size="12" name="response" value=""/><br />
+             Domain code: <input type="text" size="16" name="servercode" value="<%= servercode_default %>"/><br />
+             <input type="submit" name="action" value="Check Offline"><br />
+     </form>
+		<%
+		end
+=end
+	%>
+
+     <!-- Add device -->
+     <hr />
+     <h2>Add device:
+     </h2>
+     <form action="<%= form_action %>" method="POST" >
+             UserID: <input type="text" size="25" name="username" value=""/><br />
+             Registration code: <input type="text" size="12" name="regcode" value=""/><br />
+             Passcode: <input type="text" size="12" name="passcode" value=""/><br />
+             Domain code: <input type="text" size="16" name="servercode" value="<%= servercode_default %>"/><br />
+             <input type="submit" name="action" value="Add device"><br />
+     </form>
+
+<%
+end
+%>
+</body>
+</html>
